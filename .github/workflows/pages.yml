@@ -1,0 +1,66 @@
+name: Mirror blog to GitHub Pages
+
+# 课程要求网页项目部署到 GitHub Pages。
+# 本仓库不含源码，只负责拉取 RUI-debug769/backup-blog 构建并发布到 Pages，
+# 作为 murdok.me（生产站，ECS 托管）的镜像。
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 1" # 每周一 04:00 UTC 自动同步
+  repository_dispatch:
+    types: [mirror]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout blog source
+        uses: actions/checkout@v4
+        with:
+          repository: RUI-debug769/backup-blog
+          ref: main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Astro site
+        run: pnpm build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
